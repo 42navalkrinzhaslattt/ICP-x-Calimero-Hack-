@@ -1,0 +1,23 @@
+[package]
+edition = "2021"
+name = "context"
+# name = "kv-store"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+calimero-sdk = {git = "https://github.com/calimero-network/core"}
+calimero-storage = {git = "https://github.com/calimero-network/core"}
+candid = "0.10"
+serde = "1.0.209"
+
+[profile.app-release]
+codegen-units = 1
+debug = false
+inherits = "release"
+lto = true
+opt-level = "z"
+overflow-checks = true
+panic = "abort"

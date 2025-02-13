@@ -1,0 +1,1 @@
+/Users/antonsplavnik/Documents/Projects/Calimero/calimero_x_icp_hackathon/basic_setup/context/key_value_store/target/wasm32-unknown-unknown/app-release/kv_store.wasm: /Users/antonsplavnik/Documents/Projects/Calimero/calimero_x_icp_hackathon/basic_setup/context/key_value_store/src/lib.rs

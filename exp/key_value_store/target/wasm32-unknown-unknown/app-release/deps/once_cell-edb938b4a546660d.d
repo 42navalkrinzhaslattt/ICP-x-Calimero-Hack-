@@ -1,0 +1,9 @@
+/Users/antonsplavnik/Documents/Projects/Calimero/calimero_x_icp_hackathon/basic_setup/context/key_value_store/target/wasm32-unknown-unknown/app-release/deps/libonce_cell-edb938b4a546660d.rmeta: /Users/antonsplavnik/.cargo/registry/src/index.crates.io-6f17d22bba15001f/once_cell-1.20.2/src/lib.rs /Users/antonsplavnik/.cargo/registry/src/index.crates.io-6f17d22bba15001f/once_cell-1.20.2/src/imp_std.rs /Users/antonsplavnik/.cargo/registry/src/index.crates.io-6f17d22bba15001f/once_cell-1.20.2/src/race.rs
+
+/Users/antonsplavnik/Documents/Projects/Calimero/calimero_x_icp_hackathon/basic_setup/context/key_value_store/target/wasm32-unknown-unknown/app-release/deps/libonce_cell-edb938b4a546660d.rlib: /Users/antonsplavnik/.cargo/registry/src/index.crates.io-6f17d22bba15001f/once_cell-1.20.2/src/lib.rs /Users/antonsplavnik/.cargo/registry/src/index.crates.io-6f17d22bba15001f/once_cell-1.20.2/src/imp_std.rs /Users/antonsplavnik/.cargo/registry/src/index.crates.io-6f17d22bba15001f/once_cell-1.20.2/src/race.rs
+
+/Users/antonsplavnik/Documents/Projects/Calimero/calimero_x_icp_hackathon/basic_setup/context/key_value_store/target/wasm32-unknown-unknown/app-release/deps/once_cell-edb938b4a546660d.d: /Users/antonsplavnik/.cargo/registry/src/index.crates.io-6f17d22bba15001f/once_cell-1.20.2/src/lib.rs /Users/antonsplavnik/.cargo/registry/src/index.crates.io-6f17d22bba15001f/once_cell-1.20.2/src/imp_std.rs /Users/antonsplavnik/.cargo/registry/src/index.crates.io-6f17d22bba15001f/once_cell-1.20.2/src/race.rs
+
+/Users/antonsplavnik/.cargo/registry/src/index.crates.io-6f17d22bba15001f/once_cell-1.20.2/src/lib.rs:
+/Users/antonsplavnik/.cargo/registry/src/index.crates.io-6f17d22bba15001f/once_cell-1.20.2/src/imp_std.rs:
+/Users/antonsplavnik/.cargo/registry/src/index.crates.io-6f17d22bba15001f/once_cell-1.20.2/src/race.rs:

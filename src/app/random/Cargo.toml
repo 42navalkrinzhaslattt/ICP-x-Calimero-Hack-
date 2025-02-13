@@ -1,0 +1,25 @@
+[package]
+name = "quantum_rng"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+borsh = "1.5.5"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+calimero-sdk = { git = "https://github.com/calimero-network/core" }
+calimero-storage = { git = "https://github.com/calimero-network/core" }
+
+[profile.app-release]
+inherits = "release"
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
