@@ -1,297 +1,105 @@
-# Quantum Random Seed Oracle 🔮⚛️
+# Quantum Random Seed Oracle
 
-**ICP x Calimero Hackathon Project**
+A randomness oracle prototype: a Qiskit circuit produces a random seed, a Calimero peer-to-peer app turns it into an HMAC-SHA256 hash chain, and Calimero's ICP context proxy is used to move seeds and processing requests through on-chain proposals.
 
-A decentralized quantum random seed oracle built on the Internet Computer Protocol (ICP) and Calimero Network, providing truly random numbers generated through quantum computing principles for blockchain applications.
+**Stack:** Rust · Calimero SDK · Internet Computer (dfx, Candid) · Python · Qiskit · React + TypeScript (scaffold)    **Context:** ICP x Calimero hackathon, 2025
 
-## 🚀 Overview
+## Overview
 
-This project implements a quantum-powered random number oracle that leverages quantum superposition and measurement to generate cryptographically secure random seeds. The oracle operates across both ICP canisters and Calimero contexts, providing verifiable randomness for decentralized applications.
-
-### Key Features
-
-- **🔬 Quantum Random Generation**: Uses Qiskit quantum circuits to generate 100-bit random numbers
-- **🌐 Cross-Chain Architecture**: Operates on both ICP and Calimero networks
-- **🔐 Cryptographic Security**: HMAC-SHA256 based seed processing and verification
-- **📊 Transparent Processing**: All random seed generation and processing is verifiable on-chain
-- **🔄 Continuous Feed**: Provides ongoing stream of quantum-generated random values
-- **🎯 Oracle Interface**: Easy-to-use API for dApps requiring secure randomness
-
-## 🏗️ Architecture
+Smart contracts can't generate good randomness on their own: every node has to compute the same result, so anything "random" computed on-chain is predictable. The idea here was to take the seed from outside (a quantum circuit), then derive a sequence of values from it inside a Calimero context, where several nodes share the same state, and anchor the requests on the Internet Computer through Calimero's ICP proxy canister.
 
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Quantum Seed  │    │  Calimero Node   │    │   ICP Canister  │
-│   Generator     │───▶│  (RandomChain)   │◀──▶│  (Proxy)        │
-│   (Python/      │    │                  │    │                 │
-│   Qiskit)       │    └──────────────────┘    └─────────────────┘
-└─────────────────┘              │                       │
-                                 │                       │
-                    ┌──────────────────┐    ┌─────────────────┐
-                    │  Frontend App    │    │   External      │
-                    │  (React/TS)      │    │   dApps         │
-                    └──────────────────┘    └─────────────────┘
+Qiskit generator ──seed──▶ Calimero node(s)                ◀──proposals──▶ ICP: Calimero context-config
+ (Python, Aer)              RandomChain app (Rust → WASM)                  + context-proxy canisters
+                            seed → HMAC chain of values
 ```
 
-### Components
+## How it works
 
-1. **Quantum Seed Generator** (`src/backend/quantum_seed/`)
-   - Python-based quantum circuit using Qiskit
-   - Generates 100-bit random numbers using 5 chunks of 20 qubits each
-   - Uses Hadamard gates for quantum superposition
+### 1. Seed generation: `src/backend/quantum_seed/quantum_seed_generator.py`
 
-2. **Calimero RandomChain** (`src/app/random/`)
-   - Rust-based application running on Calimero nodes
-   - Processes quantum seeds and maintains randomness chain
-   - HMAC-SHA256 transformation for cryptographic security
+Builds five 20-qubit circuits, puts every qubit into superposition with a Hadamard gate, measures, and concatenates the bitstrings into a 100-bit number (printed as decimal, binary and hex).
 
-3. **ICP Proxy Contract** (`src/backend/proxy_contract/`)
-   - Smart contract interface on Internet Computer
-   - Manages proposals and cross-chain communication
-   - Stores quantum seeds and processed values
+Two caveats, both visible in the code:
 
-4. **Frontend Interface** (`src/frontend/`)
-   - React + TypeScript web application
-   - User interface for interacting with the oracle
-   - Real-time display of random values and statistics
+- It runs on **`AerSimulator`**, Qiskit's classical simulator, so the bits come from the simulator's pseudo-random sampler, not from quantum hardware. Pointing it at a real IBM Quantum backend is the step that would make the "quantum" part real.
+- Each circuit is created with a 20-bit classical register and then `measure_all()` adds a second one. The counts key therefore holds 20 measured bits followed by 20 unused zeros, and after truncation to 100 characters only 60 of the 100 bits are random. Measuring into the existing register (`qc.measure(range(20), range(20))`) or building the circuit without classical bits would fix it.
 
-## 🛠️ Technology Stack
+### 2. RandomChain Calimero app: `src/app/random/src/lib.rs`
 
-### **Quantum Computing**
-- **Qiskit** - IBM's quantum computing framework
-- **Qiskit Aer** - High-performance quantum circuit simulator
-- **Python 3.8+** - Quantum algorithm implementation
+A Calimero application (Rust compiled to `wasm32-unknown-unknown`) whose state is replicated across the nodes of a context:
 
-### **Blockchain Platforms**
-- **Internet Computer Protocol (ICP)** - Decentralized compute platform
-- **Calimero Network** - P2P application framework
-- **WebAssembly (WASM)** - Smart contract runtime
+| Method | What it does |
+|---|---|
+| `set_seed(quantum_seed: Vec<u8>)` | Stores the seed (rejects empty input or anything over 1 KiB) |
+| `process_value(node)` | Derives the next value and appends it with the node name and a sequence number; emits a `ValueProcessed` event |
+| `get_all_values()` / `get_last_value()` | Read the chain |
 
-### **Smart Contract Development**
-- **Rust** - Primary systems programming language
-- **Calimero SDK** - Calimero network development kit
-- **Calimero Storage** - Distributed storage primitives
-- **Borsh** - Binary serialization format
-- **Candid** - ICP interface description language
+The derivation is a hash chain: `value[n] = HMAC-SHA256(key = value[n-1], msg = n as u64 big-endian)`, with `value[0]` keyed by the seed. Each value is 32 bytes. The chain is deterministic, so anyone with the seed can recompute and check every value; equally, the values are only as unpredictable as the seed is secret.
 
-### **Frontend Development**
-- **React 18** - UI framework
-- **TypeScript** - Type-safe JavaScript
-- **Vite** - Fast build tool and dev server
-- **TailwindCSS 4.0** - Utility-first CSS framework
-- **pnpm** - Package manager
+### 3. ICP proxy contract: `src/backend/proxy_contract/proxy_contract.rs`
 
-### **Frontend Dependencies**
-- **@calimero-network/calimero-client** - Calimero network client
-- **React Router DOM** - Client-side routing
-- **Axios** - HTTP client
-- **bs58** - Base58 encoding/decoding
-- **Buffer** - Node.js Buffer polyfill
+A second Calimero app that uses the SDK's external-proposal API. `create_new_proposal` accepts `SetQuantumSeed` or `ProcessValue` requests and turns them into proposals for an external function call (`random_chain.set_seed` / `random_chain.process_value`) that goes through Calimero's context proxy canister on ICP; `approve_proposal` approves one. It also keeps seeds and processed values per proposal ID. This file has no `Cargo.toml` of its own in this repo.
 
-### **Cryptography & Security**
-- **HMAC-SHA256** - Message authentication
-- **SHA2** - Cryptographic hash functions
-- **Quantum Random Number Generation** - True randomness source
-- **Rust crypto libraries** - Memory-safe cryptographic implementations
+### 4. ICP devnet tooling: `tools/`
 
-### **Development Tools**
-- **DFX** - Internet Computer SDK
-- **merod** - Calimero node daemon
-- **meroctl** - Calimero node control CLI
-- **Cargo** - Rust package manager
-- **ESLint & Prettier** - Code quality tools
+- `context-config/` and `context-proxy/`: prebuilt Calimero ICP canisters (`.wasm` + `.did`) and the mock external canister, from Calimero's [icp-devnet](https://github.com/calimero-network/icp-devnet).
+- `deploy_devnet.sh`: a merged version of Calimero's fresh/addon devnet deploy scripts (identities, ledger, cycles, context contract, proxy code). See [`tools/tools.md`](tools/tools.md).
+- `init_and_run_nodes.sh` / `setup_calimero_icp.sh`: initialise and run three `merod` nodes, install an app on node1, create an ICP-backed context, generate identities for node2 and node3, invite them and join. The resulting IDs (and, in the setup script, node keys) go to a local `.env`, which is gitignored.
+- `upnodes.py` / `setup.py`: `pexpect` scripts that start `merod`, find the context and identity IDs, and run `set_seed` → `process_value` → `get_last_value` end to end.
 
-### **Infrastructure & DevOps**
-- **Python virtual environments** - Isolated Python dependencies
-- **Shell scripting** (Bash/Zsh) - Automation
-- **Git** - Version control
-- **Homebrew** - macOS package management
-- **Makefile** - Build automation
+### 5. Frontend: `src/frontend/`
 
-### **Python Dependencies**
-- **pexpect** - Process interaction and automation
-- **qiskit** - Quantum computing framework
-- **qiskit-aer** - Quantum circuit simulation
+A Vite + React 18 + TypeScript + Tailwind 4 scaffold wired to `@calimero-network/calimero-client`: node setup page, Calimero login page, and a placeholder home page. It does not yet display random values.
 
-### **Rust Crate Dependencies**
-- **serde & serde_json** - Serialization/deserialization
-- **hex** - Hexadecimal encoding
-- **hmac** - HMAC implementation
-- **sha2** - SHA-2 hash functions
-- **toml_edit** - TOML parsing and editing
+## Build & run
 
-## 🔧 Installation & Setup
-
-### Prerequisites
-
-- Python 3.8+ with Qiskit
-- Rust and Cargo
-- Node.js and pnpm
-- DFX (Internet Computer SDK)
-- Calimero Network tools (`merod`, `meroctl`)
-
-### Quick Start
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/42navalkrinzhaslattt/ICP-x-Calimero-Hack-.git
-   cd ICP-x-Calimero-Hack-
-   ```
-
-2. **Install Python dependencies**
-   ```bash
-   chmod +x cli_script.sh
-   ./cli_script.sh
-   ```
-
-3. **Setup Calimero nodes**
-   ```bash
-   chmod +x tools/setup_calimero_icp.sh
-   ./tools/setup_calimero_icp.sh
-   ```
-
-4. **Deploy ICP canisters**
-   ```bash
-   cd icp-devnet
-   ./deploy_devnet_fresh.sh
-   ```
-
-5. **Start the frontend**
-   ```bash
-   cd src/frontend
-   pnpm install
-   pnpm dev
-   ```
-
-## 🎮 Usage
-
-### Generating Quantum Random Seeds
+Prerequisites: Rust with the `wasm32-unknown-unknown` target, Python 3, `dfx` (the Makefile pins 0.24.3), Calimero's `merod` / `meroctl`, Node.js + pnpm for the frontend.
 
 ```bash
-# Generate quantum random seed
-python src/backend/quantum_seed/quantum_seed_generator.py
+# Seed generator (creates ./venv, installs qiskit + qiskit-aer, runs the script)
+./cli_script.sh
+
+# Build the RandomChain app to src/app/random/res/quantum_rng.wasm
+./src/app/random/build.sh
+
+# Local ICP devnet with the Calimero canisters
+./tools/deploy_devnet.sh
+
+# Calimero nodes (node1..node3), app install, ICP-backed context
+./tools/init_and_run_nodes.sh
+
+# Frontend scaffold
+cd src/frontend && pnpm install && pnpm dev
 ```
 
-### Calimero Node Operations
+Calling the app directly with `meroctl`:
 
 ```bash
-# Set quantum seed in Calimero context
 meroctl --node-name node1 call --as <IDENTITY> <CONTEXT_ID> set_seed --args '{"quantum_seed": [10,20,30,40]}'
-
-# Process random value
 meroctl --node-name node1 call --as <IDENTITY> <CONTEXT_ID> process_value --args '{"node": "node1"}'
-
-# Get processed values
 meroctl --node-name node1 call --as <IDENTITY> <CONTEXT_ID> get_all_values
 ```
 
-### ICP Canister Integration
+The node scripts install a hard-coded WASM path (`./res/blockchain.wasm` in `init_and_run_nodes.sh`, a `hello_app.wasm` in `setup_calimero_icp.sh`); point it at `src/app/random/res/quantum_rng.wasm` to run the oracle app.
 
-```bash
-# Create new random proposal
-dfx canister call context_contract create_new_proposal '(
-  record {
-    action_type = "SetQuantumSeed";
-    params = record { seed_value = "quantum_seed_data" }
-  }
-)'
-```
+Note: the `Makefile` comes from an earlier PoW-mining direction of the project. It calls `./icp-devnet/deploy_devnet_*.sh` and a `mining_contract` canister; `icp-devnet` is recorded as a submodule without a `.gitmodules` entry, so a fresh clone gets an empty directory. Use `tools/deploy_devnet.sh` instead.
 
-## 🧪 Quantum Random Generation Process
-
-1. **Quantum Circuit Creation**: Create 5 circuits with 20 qubits each
-2. **Superposition**: Apply Hadamard gates to all qubits
-3. **Measurement**: Collapse quantum states to classical bits
-4. **Concatenation**: Combine 5 chunks to form 100-bit number
-5. **Verification**: Process through HMAC-SHA256 for cryptographic security
-
-### Example Output
-```
-=== 100-bit Quantum Random Number ===
-Decimal: 1267650600228229401496703205375
-Binary: 1111110110001010101010101010101010101010101010101010101010101010101010101010101010101010101010101111
-Hexadecimal: 0xfec55555555555555f
-Bit Length: 100 bits
-```
-
-## 🔒 Security Features
-
-- **Quantum Source**: True randomness from quantum measurement
-- **Cryptographic Processing**: HMAC-SHA256 for additional security
-- **Decentralized Verification**: Multi-node consensus on Calimero
-- **Immutable Storage**: Random values stored on ICP blockchain
-- **Transparent Auditing**: All operations are publicly verifiable
-
-## 📈 Use Cases
-
-- **DeFi Protocols**: Secure random number generation for lottery systems
-- **Gaming**: Provably fair random events in blockchain games
-- **NFT Minting**: Random traits and characteristics generation
-- **Consensus Mechanisms**: Leader selection in blockchain protocols
-- **Cryptographic Applications**: Key generation and security protocols
-
-## 🏆 Hackathon Achievements
-
-- ✅ Integration of quantum computing with blockchain technology
-- ✅ Cross-chain architecture between ICP and Calimero
-- ✅ Real-time quantum random number generation
-- ✅ Decentralized oracle implementation
-- ✅ User-friendly frontend interface
-- ✅ Comprehensive documentation and testing
-
-## 🧩 Project Structure
+## Project structure
 
 ```
-├── src/
-│   ├── app/random/           # Calimero RandomChain application
-│   ├── backend/
-│   │   ├── proxy_contract/   # ICP proxy smart contract  
-│   │   └── quantum_seed/     # Quantum random generator
-│   └── frontend/            # React web interface
-├── tools/                   # Deployment and setup scripts
-├── docs/                    # Project documentation
-├── icp-devnet/             # ICP development environment
-└── exp/                    # Experimental implementations
+src/
+  app/random/              RandomChain Calimero app (the oracle logic) + built .wasm
+  app/mining_pool/         Earlier experiment: PoW mining pool as a Calimero app
+  backend/quantum_seed/    Qiskit seed generator
+  backend/proxy_contract/  Calimero app that proposes calls via the ICP context proxy
+  logic/                   Calimero proposal/chat demo app (ExternalFunctionCall proposals)
+  frontend/                React + Calimero client scaffold
+tools/                     ICP devnet deploy, node setup scripts, Calimero canisters
+exp/                       Learning experiments: hello-icp, key-value stores, macros, mining pool
+docs/                      Notes on Calimero, merod/meroctl, consensus and the PoW-on-ICP idea
 ```
 
-## 🚀 Future Enhancements
+## Credits
 
-- [ ] Hardware quantum device integration (IBM Quantum, Rigetti)
-- [ ] Multi-chain oracle support (Ethereum, Polygon, etc.)
-- [ ] Advanced cryptographic protocols (VRF, threshold signatures)
-- [ ] Real-time quantum randomness feeds
-- [ ] Enterprise API with rate limiting and authentication
-- [ ] Quantum randomness quality metrics and analysis
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [contributing guidelines](CONTRIBUTING.md) for details on how to:
-
-- Report bugs
-- Suggest features
-- Submit pull requests
-- Improve documentation
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **ICP Community** for the robust canister infrastructure
-- **Calimero Network** for the decentralized node architecture  
-- **IBM Qiskit** for quantum computing tools
-- **Hackathon Organizers** for the opportunity to innovate
-
-## 📞 Contact
-
-- **Team**: 42navalkrinzhaslattt
-- **Email**: [contact@quantumoracle.dev](mailto:contact@quantumoracle.dev)
-- **Discord**: Join our community server
-- **Twitter**: [@QuantumOracle](https://twitter.com/QuantumOracle)
-
----
-
-**Built with ❤️ for the ICP x Calimero Hackathon 2025**
-
-*Bringing quantum randomness to the decentralized world, one qubit at a time.*
+The ICP devnet scripts and the context-config / context-proxy canisters are from [Calimero Network](https://github.com/calimero-network/icp-devnet). Several files in `docs/` are adapted from Calimero's documentation.
